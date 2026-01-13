@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+        }
+        .status { margin: 20px 0; padding: 15px; border-radius: 8px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>🔌 Connection Test</h1>
+    <div id="status" class="status info">Testing connection...</div>
+    <div id="apiStatus" class="status info">Testing API...</div>
+    
+    <script>
+        const API_URL = window.location.origin + '/api/products';
+        
+        // Test 1: Page loaded
+        document.getElementById('status').textContent = '✅ Page loaded successfully!';
+        document.getElementById('status').className = 'status success';
+        
+        // Test 2: API connection
+        fetch(API_URL + '?page=1&limit=1')
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                }
+                throw new Error('API returned ' + response.status);
+            })
+            .then(data => {
+                document.getElementById('apiStatus').textContent = '✅ API connection successful!';
+                document.getElementById('apiStatus').className = 'status success';
+            })
+            .catch(error => {
+                document.getElementById('apiStatus').textContent = '❌ API Error: ' + error.message;
+                document.getElementById('apiStatus').className = 'status error';
+            });
+    </script>
+</body>
+</html>
+

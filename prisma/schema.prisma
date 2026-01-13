@@ -1,0 +1,195 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  FACEBOOK
+  APPLE
+}
+
+model User {
+  id            String       @id @default(uuid())
+  email         String       @unique
+  password      String? // Nullable for OAuth users
+  firstName     String?
+  lastName      String?
+  phone         String?
+  avatar        String? // Profile picture URL
+  provider      AuthProvider @default(LOCAL)
+  providerId    String? // OAuth provider's user ID
+  role          UserRole     @default(CUSTOMER)
+  isActive      Boolean      @default(true)
+  emailVerified Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  orders Order[]
+  cart   Cart?
+
+  @@index([email])
+  @@index([provider, providerId])
+}
+
+model Product {
+  id            String      @id @default(uuid())
+  number        String? // Number from JSON (can be string like "101A")
+  reference     String
+  brand         String
+  title         String
+  summary       String? // Summary from JSON
+  purchasePrice Float? // PurchasePrice from JSON
+  supplier      String? // Supplier from JSON
+  salePrice     Float? // SalePrice from JSON
+  price         Float // SalePrice (for backward compatibility, will be populated from salePrice)
+  description   String? // Description from JSON
+  size          Int? // TV size extracted from title (number before "inch")
+  stock         Int         @default(0) // Default stock
+  rating        Int         @default(0) // Default rating
+  images        String[]    @default([])
+  tags          String[]    @default([])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  orderItems    OrderItem[]
+
+  @@index([reference])
+  @@index([brand])
+  @@index([number])
+  @@index([size])
+}
+
+model Cart {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     Json     @default("[]") // Array of { productId: string, quantity: number }
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  CREDIT_DEBIT_CARD
+  PAYKASSMA
+  MOBILE_PAYMENT
+}
+
+model Order {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  orderNumber   String        @unique // Human-readable order number
+  status        OrderStatus   @default(PENDING)
+  paymentMethod PaymentMethod
+  totalAmount   Float
+
+  // User Information
+  fullName    String
+  cin         String? // Carte d'Identité Nationale
+  dateOfBirth DateTime?
+  email       String
+  phoneNumber String
+
+  // Billing Address
+  billingStreetAddress String
+  billingCity          String
+  billingPostalCode    String
+
+  // Shipping Address (can be same as billing)
+  shippingStreetAddress String
+  shippingCity          String
+  shippingPostalCode    String
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  orderItems OrderItem[]
+  payment    Payment?
+
+  @@index([userId])
+  @@index([orderNumber])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id         String  @id @default(uuid())
+  orderId    String
+  order      Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product @relation(fields: [productId], references: [id])
+  quantity   Int
+  unitPrice  Float // Price at time of purchase
+  totalPrice Float // quantity * unitPrice
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  orderId       String        @unique
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod
+  status        PaymentStatus @default(PENDING)
+
+  // Payment Gateway Information
+  gatewayTransactionId String? // Transaction ID from payment gateway
+  gatewayResponse      Json? // Full response from gateway
+
+  // Amount Information
+  amount   Float
+  currency String @default("TND")
+
+  // Payment Gateway URLs
+  paymentUrl  String? // URL to redirect user for payment
+  callbackUrl String? // URL for payment gateway callback
+
+  // Timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  paidAt    DateTime?
+
+  @@index([orderId])
+  @@index([status])
+  @@index([gatewayTransactionId])
+  @@index([createdAt])
+}

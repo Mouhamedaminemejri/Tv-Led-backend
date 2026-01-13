@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>LED Strip Scanner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container { max-width: 500px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; color: #333; }
+        .camera-btn {
+            width: 100%;
+            padding: 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            margin-bottom: 20px;
+            cursor: pointer;
+        }
+        .camera-btn:active { background: #0056b3; }
+        #cameraInput { display: none; }
+        .preview {
+            margin: 20px 0;
+            text-align: center;
+        }
+        .preview img {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            font-family: inherit;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        .brand-container {
+            display: flex;
+            gap: 10px;
+        }
+        .brand-container select {
+            flex: 1;
+        }
+        .brand-container input {
+            flex: 1;
+        }
+        .image-upload-section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #fff;
+            border-radius: 8px;
+            border: 2px dashed #ddd;
+        }
+        .image-upload-section label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #333;
+        }
+        .image-preview-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .image-preview {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .image-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .image-preview .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            text-align: center;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        .loading { text-align: center; padding: 20px; }
+        .section-divider {
+            margin: 25px 0 15px 0;
+            border-top: 2px solid #ddd;
+            padding-top: 15px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 LED Strip Scanner</h1>
+        
+        <button class="camera-btn" onclick="document.getElementById('cameraInput').click()">
+            📷 Scan Reference Code
+        </button>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment">
+        
+        <div id="preview" class="preview" style="display: none;">
+            <img id="previewImg" src="" alt="Preview">
+            <div class="loading" id="loading" style="display: none;">
+                🔍 Extracting reference code...
+            </div>
+        </div>
+        
+        <form id="productForm">
+            <div class="section-title">Reference Codes</div>
+            
+            <div class="form-group">
+                <label>LED Strip Reference Code</label>
+                <input type="text" id="reference" placeholder="Auto-extracted from image or type manually">
+            </div>
+            
+            <div class="form-group">
+                <label>Admin Reference Code</label>
+                <input type="text" id="adminReference" placeholder="Admin-generated reference code">
+            </div>
+            
+            <div class="form-group">
+                <label>Product Number</label>
+                <input type="text" id="number" placeholder="e.g., 101A">
+            </div>
+
+            <div class="section-divider">
+                <div class="section-title">Brand Information</div>
+            </div>
+            
+            <div class="form-group">
+                <label>Brand *</label>
+                <div class="brand-container">
+                    <select id="brandSelect" onchange="handleBrandSelect()">
+                        <option value="">Select existing brand...</option>
+                    </select>
+                    <input type="text" id="brandInput" placeholder="Or enter new brand" oninput="handleBrandInput()">
+                </div>
+            </div>
+
+            <div class="section-divider">
+                <div class="section-title">Basic Information</div>
+            </div>
+            
+            <div class="form-group">
+                <label>Title *</label>
+                <input type="text" id="title" required placeholder="Product title">
+            </div>
+            
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="description" placeholder="Product description"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label>Summary</label>
+                <textarea id="summary" placeholder="Product summary"></textarea>
+            </div>
+
+            <div class="section-divider">
+                <div class="section-title">Pricing Information</div>
+            </div>
+            
+            <div class="form-group">
+                <label>Purchase Price</label>
+                <input type="number" id="purchasePrice" step="0.01" min="0" placeholder="0.00">
+            </div>
+            
+            <div class="form-group">
+                <label>Sale Price</label>
+                <input type="number" id="salePrice" step="0.01" min="0" placeholder="0.00">
+            </div>
+            
+            <div class="form-group">
+                <label>Price *</label>
+                <input type="number" id="price" step="0.01" min="0" required placeholder="0.00">
+            </div>
+            
+            <div class="form-group">
+                <label>Supplier</label>
+                <input type="text" id="supplier" placeholder="Supplier name">
+            </div>
+
+            <div class="section-divider">
+                <div class="section-title">Product Details</div>
+            </div>
+            
+            <div class="form-group">
+                <label>Size (inches)</label>
+                <input type="number" id="size" min="0" placeholder="e.g., 32, 43, 55">
+            </div>
+            
+            <div class="form-group">
+                <label>Stock</label>
+                <input type="number" id="stock" value="0" min="0">
+            </div>
+            
+            <div class="form-group">
+                <label>Rating (0-5)</label>
+                <input type="number" id="rating" value="0" min="0" max="5" step="0.1">
+            </div>
+            
+            <div class="form-group">
+                <label>Tags (comma-separated)</label>
+                <input type="text" id="tags" placeholder="e.g., LED, Strip, RGB">
+            </div>
+
+            <div class="section-divider">
+                <div class="section-title">Images</div>
+            </div>
+            
+            <div class="image-upload-section">
+                <label>Additional Product Images</label>
+                <input type="file" id="additionalImages" accept="image/*" multiple>
+                <div class="image-preview-container" id="imagePreviews"></div>
+            </div>
+            
+            <button type="submit" class="submit-btn" id="submitBtn">
+                ✅ Add to Database
+            </button>
+        </form>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        // Auto-detect API URL (works if HTML is served from same server)
+        const API_URL = window.location.origin + '/api/products';
+        const BRANDS_URL = API_URL + '/brands';
+        const QUICK_ADD_URL = API_URL + '/quick-add';
+        const SCAN_AND_ADD_URL = API_URL + '/scan-and-add';
+        
+        // Debug: Log current URL
+        console.log('Current URL:', window.location.href);
+        console.log('API URL:', API_URL);
+        
+        let currentImageFile = null;
+        let additionalImageFiles = [];
+        let brandsList = [];
+        
+        // Load brands on page load
+        window.addEventListener('load', async function() {
+            console.log('Page loaded successfully');
+            await loadBrands();
+        });
+        
+        // Load existing brands
+        async function loadBrands() {
+            try {
+                const response = await fetch(BRANDS_URL);
+                if (response.ok) {
+                    brandsList = await response.json();
+                    const brandSelect = document.getElementById('brandSelect');
+                    brandSelect.innerHTML = '<option value="">Select existing brand...</option>';
+                    brandsList.forEach(brand => {
+                        const option = document.createElement('option');
+                        option.value = brand;
+                        option.textContent = brand;
+                        brandSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading brands:', error);
+            }
+        }
+        
+        // Handle brand select change
+        function handleBrandSelect() {
+            const brandSelect = document.getElementById('brandSelect');
+            const brandInput = document.getElementById('brandInput');
+            if (brandSelect.value) {
+                brandInput.value = brandSelect.value;
+            }
+        }
+        
+        // Handle brand input change
+        function handleBrandInput() {
+            const brandInput = document.getElementById('brandInput');
+            const brandSelect = document.getElementById('brandSelect');
+            if (brandInput.value && brandsList.includes(brandInput.value)) {
+                brandSelect.value = brandInput.value;
+            } else {
+                brandSelect.value = '';
+            }
+        }
+        
+        // Camera input handler - Show preview only (OCR done on server for speed)
+        document.getElementById('cameraInput').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            currentImageFile = file;
+            const preview = document.getElementById('preview');
+            const previewImg = document.getElementById('previewImg');
+            
+            // Show preview
+            preview.style.display = 'block';
+            previewImg.src = URL.createObjectURL(file);
+            
+            // Clear reference field - will be filled by server OCR
+            document.getElementById('reference').value = '';
+            showStatus('📸 Image ready. Click "Add to Database" to extract reference code (3-4 seconds).', 'info');
+        });
+        
+        // Additional images handler
+        document.getElementById('additionalImages').addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            additionalImageFiles = files;
+            displayImagePreviews(files);
+        });
+        
+        function displayImagePreviews(files) {
+            const container = document.getElementById('imagePreviews');
+            container.innerHTML = '';
+            
+            files.forEach((file, index) => {
+                const preview = document.createElement('div');
+                preview.className = 'image-preview';
+                
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-btn';
+                removeBtn.textContent = '×';
+                removeBtn.onclick = () => removeImage(index);
+                
+                preview.appendChild(img);
+                preview.appendChild(removeBtn);
+                container.appendChild(preview);
+            });
+        }
+        
+        function removeImage(index) {
+            additionalImageFiles.splice(index, 1);
+            const input = document.getElementById('additionalImages');
+            const dt = new DataTransfer();
+            additionalImageFiles.forEach(file => dt.items.add(file));
+            input.files = dt.files;
+            displayImagePreviews(additionalImageFiles);
+        }
+        
+        // Form submission
+        document.getElementById('productForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Processing...';
+            
+            const reference = document.getElementById('reference').value.trim();
+            const brand = document.getElementById('brandInput').value.trim() || document.getElementById('brandSelect').value.trim();
+            const title = document.getElementById('title').value.trim();
+            
+            // Reference is required if no image is provided (manual entry)
+            if (!currentImageFile && !reference) {
+                showStatus('❌ Reference code is required when no image is provided!', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Add to Database';
+                return;
+            }
+            
+            if (!brand || !title) {
+                showStatus('❌ Brand and title are required!', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Add to Database';
+                return;
+            }
+            
+            // Collect all form data
+            const productData = {
+                reference: reference,
+                brand: brand,
+                title: title,
+                number: document.getElementById('number').value.trim() || undefined,
+                adminReference: document.getElementById('adminReference').value.trim() || undefined,
+                description: document.getElementById('description').value.trim() || undefined,
+                summary: document.getElementById('summary').value.trim() || undefined,
+                purchasePrice: parseFloat(document.getElementById('purchasePrice').value) || undefined,
+                salePrice: parseFloat(document.getElementById('salePrice').value) || undefined,
+                price: parseFloat(document.getElementById('price').value) || 0,
+                supplier: document.getElementById('supplier').value.trim() || undefined,
+                size: parseInt(document.getElementById('size').value) || undefined,
+                stock: parseInt(document.getElementById('stock').value) || 0,
+                rating: parseFloat(document.getElementById('rating').value) || 0,
+                tags: document.getElementById('tags').value.split(',').map(t => t.trim()).filter(t => t.length > 0) || [],
+            };
+            
+            // If we have a scanned image, use scan-and-add endpoint
+            if (currentImageFile) {
+                try {
+                    showStatus('🔍 Extracting reference code (server-side OCR)...', 'info');
+                    
+                    const formData = new FormData();
+                    formData.append('image', currentImageFile);
+                    
+                    // Add all product fields (only include reference if manually provided)
+                    Object.keys(productData).forEach(key => {
+                        // Skip reference if empty (let OCR extract it)
+                        if (key === 'reference' && !productData[key]) {
+                            return;
+                        }
+                        if (productData[key] !== undefined && productData[key] !== null && productData[key] !== '') {
+                            if (Array.isArray(productData[key])) {
+                                formData.append(key, JSON.stringify(productData[key]));
+                            } else {
+                                formData.append(key, productData[key].toString());
+                            }
+                        }
+                    });
+                    
+                    // Add additional images
+                    additionalImageFiles.forEach((file, index) => {
+                        formData.append(`additionalImages`, file);
+                    });
+                    
+                    const scanStartTime = Date.now();
+                    const response = await fetch(SCAN_AND_ADD_URL, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const responseText = await response.text();
+                    console.log('Response status:', response.status);
+                    console.log('Response text:', responseText);
+                    
+                    if (response.ok) {
+                        const result = JSON.parse(responseText);
+                        const totalTime = Date.now() - scanStartTime;
+                        showStatus(`✅ Product saved! Reference: ${result.reference}. OCR: ${result.extractionTime}ms, Total: ${totalTime}ms`, 'success');
+                        
+                        // Update reference field with extracted value
+                        document.getElementById('reference').value = result.reference;
+                        
+                        // Reload brands in case new brand was added
+                        await loadBrands();
+                        
+                        // Reset form
+                        setTimeout(() => {
+                            document.getElementById('productForm').reset();
+                            document.getElementById('preview').style.display = 'none';
+                            document.getElementById('imagePreviews').innerHTML = '';
+                            currentImageFile = null;
+                            additionalImageFiles = [];
+                        }, 2000);
+                    } else {
+                        try {
+                            const error = JSON.parse(responseText);
+                            showStatus('❌ Error: ' + (error.message || 'Failed to process image'), 'error');
+                        } catch (e) {
+                            showStatus('❌ Error: ' + responseText, 'error');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Scan Error:', error);
+                    showStatus('❌ Error: ' + (error.message || 'Network error'), 'error');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '✅ Add to Database';
+                }
+                return;
+            }
+            
+            // Fallback: Manual entry (if no image) - use regular create endpoint
+            try {
+                // Add additional images to productData if any
+                if (additionalImageFiles.length > 0) {
+                    // For manual entry without scan, we'll need to upload images separately
+                    // For now, we'll use the quick-add endpoint and handle images separately
+                    showStatus('⚠️ Note: Additional images will be uploaded separately', 'info');
+                }
+                
+                const response = await fetch(QUICK_ADD_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(productData)
+                });
+                
+                const responseText = await response.text();
+                console.log('Response status:', response.status);
+                console.log('Response text:', responseText);
+                
+                if (response.ok) {
+                    const product = JSON.parse(responseText);
+                    showStatus('✅ Product added successfully! ID: ' + product.id, 'success');
+                    
+                    // Reload brands in case new brand was added
+                    await loadBrands();
+                    
+                    // Reset form
+                    document.getElementById('productForm').reset();
+                    document.getElementById('preview').style.display = 'none';
+                    document.getElementById('imagePreviews').innerHTML = '';
+                    currentImageFile = null;
+                    additionalImageFiles = [];
+                } else {
+                    try {
+                        const error = JSON.parse(responseText);
+                        showStatus('❌ Error: ' + (error.message || 'Failed to add product'), 'error');
+                    } catch (e) {
+                        showStatus('❌ Error: ' + responseText, 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('Submit Error:', error);
+                const errorMsg = error.message || 'Network error. Check your connection.';
+                showStatus('❌ Error: ' + errorMsg, 'error');
+                console.error('Full error:', error);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '✅ Add to Database';
+            }
+        });
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusDiv.style.display = 'none';
+                }, 3000);
+            }
+        }
+    </script>
+</body>
+</html>
