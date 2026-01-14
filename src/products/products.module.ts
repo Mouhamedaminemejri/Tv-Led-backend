@@ -5,9 +5,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { CartModule } from '../cart/cart.module';
 import { StorageModule } from '../storage/storage.module';
 import { OcrService } from './services/ocr.service';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [PrismaModule, forwardRef(() => CartModule), StorageModule],
+  imports: [PrismaModule, forwardRef(() => CartModule), StorageModule, AuthModule],
   controllers: [ProductsController],
   providers: [ProductsService, OcrService],
   exports: [ProductsService],

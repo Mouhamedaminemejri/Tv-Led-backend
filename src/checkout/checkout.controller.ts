@@ -6,21 +6,41 @@ import {
   Query,
   Param,
   BadRequestException,
-  Req,
+  UseGuards,
 } from '@nestjs/common';
 import { CheckoutService } from './checkout.service';
 import { InitiatePaymentDto } from './dto/initiate-payment.dto';
+import { OptionalAuthGuard } from '../auth/guards/optional-auth.guard';
+import { Public } from '../auth/decorators/public.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { GuestSession } from '../auth/decorators/guest-session.decorator';
 
 @Controller('checkout')
 export class CheckoutController {
   constructor(private readonly checkoutService: CheckoutService) {}
 
   @Post('initiate-payment')
-  async initiatePayment(@Body() initiatePaymentDto: InitiatePaymentDto) {
-    return this.checkoutService.initiatePayment(initiatePaymentDto);
+  @UseGuards(OptionalAuthGuard)
+  async initiatePayment(
+    @Body() initiatePaymentDto: InitiatePaymentDto,
+    @CurrentUser() user: { id: string } | null,
+    @GuestSession() guestSessionId: string | null,
+  ) {
+    if (!user && !guestSessionId) {
+      throw new BadRequestException(
+        'Authentication required. Please provide JWT token or X-Guest-Token header.',
+      );
+    }
+
+    return this.checkoutService.initiatePayment(
+      initiatePaymentDto,
+      user?.id || null,
+      guestSessionId || null,
+    );
   }
 
   @Post('payment/callback')
+  @Public()
   async handlePaymentCallback(
     @Body() callbackData: any,
     @Query('gateway') gateway: 'paykassma' | 'mobile' = 'paykassma',
@@ -29,17 +49,24 @@ export class CheckoutController {
   }
 
   @Get('payment/status')
+  @UseGuards(OptionalAuthGuard)
   async getPaymentStatus(
     @Query('orderId') orderId: string,
-    @Query('userId') userId: string,
+    @CurrentUser() user: { id: string } | null,
+    @GuestSession() guestSessionId: string | null,
   ) {
-    if (!orderId || !userId) {
-      throw new BadRequestException('orderId and userId are required');
+    if (!orderId) {
+      throw new BadRequestException('orderId is required');
     }
-    return this.checkoutService.getPaymentStatus(orderId, userId);
+    return this.checkoutService.getPaymentStatus(
+      orderId,
+      user?.id || null,
+      guestSessionId || null,
+    );
   }
 
   @Get('success')
+  @Public()
   async paymentSuccess(
     @Query('orderId') orderId: string,
     @Query('mock') mock?: string,

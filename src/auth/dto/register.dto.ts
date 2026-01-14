@@ -23,4 +23,8 @@ export class RegisterDto {
   @IsString()
   @MaxLength(20)
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  guestSessionId?: string; // Guest token to migrate cart from
 }

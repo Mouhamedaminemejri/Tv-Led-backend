@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -8,11 +8,17 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
+import { GuestSessionService } from './services/guest-session.service';
+import { OptionalAuthGuard } from './guards/optional-auth.guard';
 import { PrismaModule } from '../prisma/prisma.module';
+import { CartModule } from '../cart/cart.module';
+import { UploadModule } from '../upload/upload.module';
 
 @Module({
   imports: [
     PrismaModule,
+    UploadModule,
+    forwardRef(() => CartModule), // Forward ref to avoid circular dependency
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -31,6 +37,8 @@ import { PrismaModule } from '../prisma/prisma.module';
   controllers: [AuthController],
   providers: [
     AuthService,
+    GuestSessionService,
+    OptionalAuthGuard,
     JwtStrategy,
     LocalStrategy,
     // OAuth strategies are always loaded but will use placeholder values if not configured
@@ -40,6 +48,11 @@ import { PrismaModule } from '../prisma/prisma.module';
     // Apple strategy would be added here when properly configured
     // Apple Sign-In requires significant Apple Developer setup
   ],
-  exports: [AuthService, JwtModule],
+  exports: [
+    AuthService,
+    GuestSessionService,
+    OptionalAuthGuard,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

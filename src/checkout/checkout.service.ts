@@ -28,6 +28,8 @@ export class CheckoutService {
    */
   async initiatePayment(
     initiatePaymentDto: InitiatePaymentDto,
+    userId: string | null = null,
+    sessionId: string | null = null,
   ): Promise<{
     order: Order;
     paymentUrl?: string;
@@ -35,7 +37,8 @@ export class CheckoutService {
   }> {
     // Step 1: Create order first
     const order = await this.ordersService.createOrder({
-      userId: initiatePaymentDto.userId,
+      userId,
+      sessionId,
       paymentMethod: initiatePaymentDto.paymentMethod,
       fullName: initiatePaymentDto.fullName,
       cin: initiatePaymentDto.cin,
@@ -253,7 +256,11 @@ export class CheckoutService {
   /**
    * Get payment status for an order
    */
-  async getPaymentStatus(orderId: string, userId: string): Promise<{
+  async getPaymentStatus(
+    orderId: string,
+    userId: string | null,
+    sessionId: string | null,
+  ): Promise<{
     paymentStatus: PaymentStatus;
     paymentUrl?: string;
     orderStatus: string;
@@ -267,7 +274,12 @@ export class CheckoutService {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 
-    if (order.userId !== userId) {
+    // Verify ownership: either userId or sessionId must match
+    const isOwner =
+      (userId && order.userId === userId) ||
+      (sessionId && order.sessionId === sessionId);
+
+    if (!isOwner) {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 

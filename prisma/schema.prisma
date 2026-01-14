@@ -22,6 +22,12 @@ enum AuthProvider {
   APPLE
 }
 
+enum AddressType {
+  SHIPPING
+  BILLING
+  BOTH
+}
+
 model User {
   id            String       @id @default(uuid())
   email         String       @unique
@@ -30,6 +36,7 @@ model User {
   lastName      String?
   phone         String?
   avatar        String? // Profile picture URL
+  bio           String? // Optional user bio
   provider      AuthProvider @default(LOCAL)
   providerId    String? // OAuth provider's user ID
   role          UserRole     @default(CUSTOMER)
@@ -38,8 +45,10 @@ model User {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  orders Order[]
-  cart   Cart?
+  orders        Order[]
+  cart          Cart?
+  addresses     Address[]
+  preferences   UserPreferences?
 
   @@index([email])
   @@index([provider, providerId])
@@ -74,13 +83,15 @@ model Product {
 
 model Cart {
   id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String?  @unique  // Nullable - for authenticated users
+  sessionId String?  @unique  // Nullable - for guest users (UUID token)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     Json     @default("[]") // Array of { productId: string, quantity: number }
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([sessionId])
 }
 
 enum OrderStatus {
@@ -101,8 +112,9 @@ enum PaymentMethod {
 
 model Order {
   id            String        @id @default(uuid())
-  userId        String
-  user          User          @relation(fields: [userId], references: [id])
+  userId        String?       // Nullable - for authenticated users
+  sessionId     String?       // Nullable - for guest users (UUID token)
+  user          User?         @relation(fields: [userId], references: [id])
   orderNumber   String        @unique // Human-readable order number
   status        OrderStatus   @default(PENDING)
   paymentMethod PaymentMethod
@@ -134,6 +146,7 @@ model Order {
   payment    Payment?
 
   @@index([userId])
+  @@index([sessionId])
   @@index([orderNumber])
   @@index([status])
   @@index([createdAt])
@@ -192,4 +205,35 @@ model Payment {
   @@index([status])
   @@index([gatewayTransactionId])
   @@index([createdAt])
+}
+
+model Address {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          AddressType
+  isDefault     Boolean     @default(false)
+  label         String?     // e.g., "Home", "Office"
+  streetAddress String
+  apartment     String?     // Apartment, suite, unit, etc.
+  city          String
+  state         String?     // State or province
+  postalCode    String
+  country       String      @default("Tunisia")
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+model UserPreferences {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderUpdates    Boolean  @default(true)
+  promotions      Boolean  @default(false)
+  newsletter      Boolean  @default(false)
+  smsNotifications Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

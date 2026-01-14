@@ -15,9 +15,6 @@ import {
 } from '../../orders/dto/create-order.dto';
 
 export class InitiatePaymentDto {
-  @IsString()
-  userId: string; // Will be extracted from JWT token when auth is implemented
-
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
 

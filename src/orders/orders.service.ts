@@ -31,9 +31,21 @@ export class OrdersService {
    * Create order with transaction handling for high concurrency
    * Uses database transactions to ensure atomicity
    */
-  async createOrder(createOrderDto: CreateOrderDto): Promise<Order> {
-    // Get user's cart
-    const cart = await this.cartService.getCart(createOrderDto.userId);
+  async createOrder(
+    createOrderDto: CreateOrderDto & { userId?: string | null; sessionId?: string | null },
+  ): Promise<Order> {
+    // Get cart - supports both authenticated and guest users
+    const cartIdentifier = createOrderDto.userId
+      ? { userId: createOrderDto.userId }
+      : createOrderDto.sessionId
+        ? { sessionId: createOrderDto.sessionId }
+        : null;
+
+    if (!cartIdentifier) {
+      throw new BadRequestException('Either userId or sessionId must be provided');
+    }
+
+    const cart = await this.cartService.getCart(cartIdentifier);
     
     if (!cart.itemsWithProducts || cart.itemsWithProducts.length === 0) {
       throw new BadRequestException('Cart is empty');
@@ -120,7 +132,8 @@ export class OrdersService {
         // Step 4: Create order
         const order = await tx.order.create({
           data: {
-            userId: createOrderDto.userId,
+            userId: createOrderDto.userId || null,
+            sessionId: createOrderDto.sessionId || null,
             orderNumber: this.generateOrderNumber(),
             status: OrderStatus.PENDING,
             paymentMethod: createOrderDto.paymentMethod,
@@ -156,14 +169,21 @@ export class OrdersService {
           },
         });
 
-        // Step 5: Clear user's cart after successful order
-        await tx.cart.update({
-          where: { userId: createOrderDto.userId },
-          data: { items: [] },
-        });
+        // Step 5: Clear cart after successful order (supports both user and guest)
+        if (createOrderDto.userId) {
+          await tx.cart.updateMany({
+            where: { userId: createOrderDto.userId },
+            data: { items: [] },
+          });
+        } else if (createOrderDto.sessionId) {
+          await tx.cart.updateMany({
+            where: { sessionId: createOrderDto.sessionId },
+            data: { items: [] },
+          });
+        }
 
         this.logger.log(
-          `Order created: ${order.orderNumber} for user ${createOrderDto.userId}`,
+          `Order created: ${order.orderNumber} for ${createOrderDto.userId ? `user ${createOrderDto.userId}` : `guest ${createOrderDto.sessionId}`}`,
         );
 
         return order;
@@ -178,7 +198,11 @@ export class OrdersService {
   /**
    * Get order by ID
    */
-  async getOrder(orderId: string, userId: string): Promise<Order> {
+  async getOrder(
+    orderId: string,
+    userId: string | null,
+    sessionId: string | null,
+  ): Promise<Order> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -194,8 +218,12 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 
-    // Verify order belongs to user
-    if (order.userId !== userId) {
+    // Verify order ownership: either userId or sessionId must match
+    const isOwner =
+      (userId && order.userId === userId) ||
+      (sessionId && order.sessionId === sessionId);
+
+    if (!isOwner) {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 
@@ -217,6 +245,145 @@ export class OrdersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Get user orders with pagination
+   */
+  async getUserOrdersPaginated(
+    userId: string,
+    page: number = 1,
+    limit: number = 10,
+    status?: OrderStatus,
+  ): Promise<{
+    data: Order[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const skip = (page - 1) * limit;
+    const where: any = { userId };
+
+    if (status) {
+      where.status = status;
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        include: {
+          orderItems: {
+            include: {
+              product: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Get all orders with pagination (Admin only)
+   */
+  async getAllOrders(
+    page: number = 1,
+    limit: number = 20,
+    status?: OrderStatus,
+    userId?: string,
+  ): Promise<{
+    data: Order[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }> {
+    const skip = (page - 1) * limit;
+    const where: any = {};
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (userId) {
+      where.userId = userId;
+    }
+
+    const [data, total] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        include: {
+          orderItems: {
+            include: {
+              product: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  /**
+   * Get order by ID (Admin only - can access any order)
+   */
+  async getOrderById(orderId: string): Promise<Order> {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        orderItems: {
+          include: {
+            product: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException(`Order with ID ${orderId} not found`);
+    }
+
+    return order;
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus, Query, BadRequestException, UseInterceptors, UploadedFile, UploadedFiles, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, HttpCode, HttpStatus, Query, BadRequestException, UseInterceptors, UploadedFile, UploadedFiles, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator, UseGuards } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { Product } from '@prisma/client';
@@ -12,6 +12,10 @@ import { SearchSuggestionsResponseDto } from './dto/search-suggestions-response.
 import { QuickAddProductDto } from './dto/quick-add-product.dto';
 import { ScanAndAddDto } from './dto/scan-and-add.dto';
 import { BulkDeleteProductsDto } from './dto/bulk-delete-products.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 @Controller('products')
 export class ProductsController {
@@ -164,11 +168,15 @@ export class ProductsController {
     }
 
     @Post()
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     async create(@Body() createProductDto: CreateProductDto): Promise<Product> {
         return this.productsService.create(createProductDto);
     }
 
     @Put(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     async update(
         @Param('id') id: string,
         @Body() updateProductDto: UpdateProductDto,
@@ -177,6 +185,8 @@ export class ProductsController {
     }
 
     @Delete(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     @HttpCode(HttpStatus.NO_CONTENT)
     async remove(@Param('id') id: string): Promise<void> {
         return this.productsService.remove(id);
@@ -188,6 +198,8 @@ export class ProductsController {
      * Body: { "ids": ["uuid1", "uuid2", "uuid3"] }
      */
     @Delete('bulk')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
     async removeMany(@Body() dto: BulkDeleteProductsDto): Promise<{
         deletedCount: number;
         failedIds: string[];

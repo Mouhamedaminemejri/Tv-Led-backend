@@ -9,14 +9,25 @@ import {
   HttpCode,
   HttpStatus,
   Put,
+  Query,
+  Param,
+  Delete,
+  UseInterceptors,
+  UploadedFile,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { DeleteAccountDto } from './dto/delete-account.dto';
+import { UpdateNotificationPreferencesDto } from './dto/update-notification-preferences.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -25,13 +36,31 @@ import { Roles } from './decorators/roles.decorator';
 import { Public } from './decorators/public.decorator';
 import { UserRole, AuthProvider } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
+import { GuestSessionService } from './services/guest-session.service';
+import { UploadService } from '../upload/upload.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly guestSessionService: GuestSessionService,
+    private readonly uploadService: UploadService,
   ) {}
+
+  /**
+   * Generate a guest session token
+   * POST /api/auth/guest-token
+   */
+  @Public()
+  @Post('guest-token')
+  @HttpCode(HttpStatus.OK)
+  async generateGuestToken() {
+    return {
+      guestToken: this.guestSessionService.generateGuestToken(),
+      message: 'Guest token generated successfully',
+    };
+  }
 
   /**
    * Register a new user
@@ -52,7 +81,9 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: LoginDto, @CurrentUser() user: any) {
+  async login(@Body() loginDto: LoginDto) {
+    // LocalAuthGuard validates credentials and sets req.user
+    // The login logic is handled in AuthService
     return this.authService.login(loginDto);
   }
 
@@ -101,8 +132,17 @@ export class AuthController {
   @Get('google')
   @UseGuards(AuthGuard('google'))
   async googleAuth() {
-    // Initiates Google OAuth flow
-    // If credentials are not configured, Passport will handle the error
+    // Check if Google OAuth is configured
+    const clientID = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+    
+    if (!clientID || !clientSecret || clientID === 'not-configured' || clientSecret === 'not-configured') {
+      // This will be caught by error handler, but Passport will try to redirect anyway
+      // The strategy will handle the error gracefully
+    }
+    
+    // Initiates Google OAuth flow - Passport will redirect to Google
+    // If not configured, Passport will throw an error which we handle in the callback
   }
 
   /**
@@ -113,15 +153,16 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleAuthCallback(@Req() req: Request, @Res() res: Response) {
-    const oauthUser = req.user as any;
-
-    if (!oauthUser || !oauthUser.email) {
-      return res.redirect(
-        `${this.getFrontendUrl()}/auth/error?message=Failed to authenticate with Google`,
-      );
-    }
-
     try {
+      const oauthUser = req.user as any;
+
+      if (!oauthUser || !oauthUser.email) {
+        const errorMessage = oauthUser?.error || 'Failed to authenticate with Google. Email is required.';
+        return res.redirect(
+          `${this.getFrontendUrl(req)}/auth/error?message=${encodeURIComponent(errorMessage)}`,
+        );
+      }
+
       const user = await this.authService.validateOAuthUser(
         AuthProvider.GOOGLE,
         oauthUser.providerId,
@@ -137,11 +178,12 @@ export class AuthController {
 
       // Redirect to frontend with token
       return res.redirect(
-        `${this.getFrontendUrl()}/auth/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify(userData))}`,
+        `${this.getFrontendUrl(req)}/auth/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify(userData))}`,
       );
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Google OAuth callback error:', error);
       return res.redirect(
-        `${this.getFrontendUrl()}/auth/error?message=${encodeURIComponent(error.message || 'Authentication failed')}`,
+        `${this.getFrontendUrl(req)}/auth/error?message=${encodeURIComponent(error?.message || 'Authentication failed')}`,
       );
     }
   }
@@ -154,8 +196,17 @@ export class AuthController {
   @Get('facebook')
   @UseGuards(AuthGuard('facebook'))
   async facebookAuth() {
-    // Initiates Facebook OAuth flow
-    // If credentials are not configured, Passport will handle the error
+    // Check if Facebook OAuth is configured
+    const appID = this.configService.get<string>('FACEBOOK_APP_ID');
+    const appSecret = this.configService.get<string>('FACEBOOK_APP_SECRET');
+    
+    if (!appID || !appSecret || appID === 'not-configured' || appSecret === 'not-configured') {
+      // This will be caught by error handler, but Passport will try to redirect anyway
+      // The strategy will handle the error gracefully
+    }
+    
+    // Initiates Facebook OAuth flow - Passport will redirect to Facebook
+    // If not configured, Passport will throw an error which we handle in the callback
   }
 
   /**
@@ -166,15 +217,26 @@ export class AuthController {
   @Get('facebook/callback')
   @UseGuards(AuthGuard('facebook'))
   async facebookAuthCallback(@Req() req: Request, @Res() res: Response) {
-    const oauthUser = req.user as any;
-
-    if (!oauthUser || !oauthUser.email) {
-      return res.redirect(
-        `${this.getFrontendUrl()}/auth/error?message=Failed to authenticate with Facebook. Email is required.`,
-      );
-    }
-
     try {
+      // Check if OAuth credentials are configured
+      const appID = this.configService.get<string>('FACEBOOK_APP_ID');
+      const appSecret = this.configService.get<string>('FACEBOOK_APP_SECRET');
+      
+      if (!appID || !appSecret || appID === 'not-configured' || appSecret === 'not-configured') {
+        return res.redirect(
+          `${this.getFrontendUrl(req)}/auth/error?message=${encodeURIComponent('Facebook OAuth is not configured. Please contact administrator.')}`,
+        );
+      }
+
+      const oauthUser = req.user as any;
+
+      if (!oauthUser || !oauthUser.email) {
+        const errorMessage = oauthUser?.error || 'Failed to authenticate with Facebook. Email is required.';
+        return res.redirect(
+          `${this.getFrontendUrl(req)}/auth/error?message=${encodeURIComponent(errorMessage)}`,
+        );
+      }
+
       const user = await this.authService.validateOAuthUser(
         AuthProvider.FACEBOOK,
         oauthUser.providerId,
@@ -189,11 +251,12 @@ export class AuthController {
         await this.authService.generateJwtForOAuthUser(user);
 
       return res.redirect(
-        `${this.getFrontendUrl()}/auth/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify(userData))}`,
+        `${this.getFrontendUrl(req)}/auth/callback?token=${accessToken}&user=${encodeURIComponent(JSON.stringify(userData))}`,
       );
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Facebook OAuth callback error:', error);
       return res.redirect(
-        `${this.getFrontendUrl()}/auth/error?message=${encodeURIComponent(error.message || 'Authentication failed')}`,
+        `${this.getFrontendUrl(req)}/auth/error?message=${encodeURIComponent(error?.message || 'Authentication failed')}`,
       );
     }
   }
@@ -252,11 +315,174 @@ export class AuthController {
   }
 
   /**
-   * Get frontend URL from config or default
+   * Get all users (Admin only)
+   * GET /api/auth/admin/users
+   * Query params: page, limit, role, isActive
    */
-  private getFrontendUrl(): string {
-    return (
-      this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000'
-    );
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Get('admin/users')
+  async getAllUsers(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('role') role?: UserRole,
+    @Query('isActive') isActive?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 20;
+    const isActiveFilter = isActive === 'true' ? true : isActive === 'false' ? false : undefined;
+    return this.authService.getAllUsers(pageNum, limitNum, role, isActiveFilter);
+  }
+
+  /**
+   * Get user by ID with cart (Admin only)
+   * GET /api/auth/admin/users/:id
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Get('admin/users/:id')
+  async getUserById(@Param('id') id: string) {
+    return this.authService.getUserByIdWithCart(id);
+  }
+
+  /**
+   * Update user (Admin only)
+   * PUT /api/auth/admin/users/:id
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Put('admin/users/:id')
+  async updateUser(
+    @Param('id') id: string,
+    @Body() updateDto: UpdateProfileDto & { role?: UserRole; isActive?: boolean },
+  ) {
+    return this.authService.updateUserAdmin(id, updateDto);
+  }
+
+  /**
+   * Deactivate/Activate user (Admin only)
+   * PUT /api/auth/admin/users/:id/status
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @Put('admin/users/:id/status')
+  async updateUserStatus(
+    @Param('id') id: string,
+    @Body('isActive') isActive: boolean,
+  ) {
+    return this.authService.updateUserStatus(id, isActive);
+  }
+
+  /**
+   * Upload avatar
+   * POST /api/auth/avatar
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(HttpStatus.OK)
+  async uploadAvatar(
+    @CurrentUser() user: { id: string },
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    // Upload file to storage
+    const filePath = await this.uploadService.uploadFile(file, 'avatars');
+    const avatarUrl = this.uploadService.getFileUrl(filePath);
+
+    // Update user avatar
+    await this.authService.updateAvatar(user.id, avatarUrl);
+
+    return {
+      avatarUrl,
+    };
+  }
+
+  /**
+   * Delete avatar
+   * DELETE /api/auth/avatar
+   */
+  @UseGuards(JwtAuthGuard)
+  @Delete('avatar')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteAvatar(@CurrentUser() user: { id: string }) {
+    await this.authService.deleteAvatar(user.id);
+  }
+
+  /**
+   * Get notification preferences
+   * GET /api/auth/preferences/notifications
+   */
+  @UseGuards(JwtAuthGuard)
+  @Get('preferences/notifications')
+  async getNotificationPreferences(@CurrentUser() user: { id: string }) {
+    return this.authService.getNotificationPreferences(user.id);
+  }
+
+  /**
+   * Update notification preferences
+   * PUT /api/auth/preferences/notifications
+   */
+  @UseGuards(JwtAuthGuard)
+  @Put('preferences/notifications')
+  async updateNotificationPreferences(
+    @CurrentUser() user: { id: string },
+    @Body() updateDto: UpdateNotificationPreferencesDto,
+  ) {
+    return this.authService.updateNotificationPreferences(user.id, updateDto);
+  }
+
+  /**
+   * Delete account
+   * POST /api/auth/delete-account
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('delete-account')
+  @HttpCode(HttpStatus.OK)
+  async deleteAccount(
+    @CurrentUser() user: { id: string },
+    @Body() deleteDto: DeleteAccountDto,
+  ) {
+    return this.authService.deleteAccount(user.id, deleteDto);
+  }
+
+  /**
+   * Logout
+   * POST /api/auth/logout
+   */
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  async logout(@CurrentUser() user: { id: string }) {
+    // JWT is stateless, so we just return success
+    // Frontend should clear tokens from localStorage
+    return this.authService.logout();
+  }
+
+  /**
+   * Get frontend URL from config or default
+   * Supports multiple origins and checks request origin
+   */
+  private getFrontendUrl(req?: Request): string {
+    // Check if request has origin header (from frontend)
+    if (req?.headers?.origin) {
+      return req.headers.origin;
+    }
+    
+    // Check environment variable
+    const envUrl = this.configService.get<string>('FRONTEND_URL');
+    if (envUrl) {
+      return envUrl;
+    }
+    
+    // Default fallback
+    return 'http://localhost:8080';
   }
 }

@@ -40,9 +40,6 @@ export class ShippingAddressDto {
 }
 
 export class CreateOrderDto {
-  @IsString()
-  userId: string; // Will be extracted from JWT token when auth is implemented
-
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
 
@@ -75,6 +72,11 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => ShippingAddressDto)
   shippingAddress: ShippingAddressDto;
+}
+
+// Internal DTO used by service (includes userId from authenticated user)
+export interface CreateOrderWithUserIdDto extends CreateOrderDto {
+  userId: string;
 }
 
 
