@@ -132,8 +132,8 @@ export class OrdersService {
         // Step 4: Create order
         const order = await tx.order.create({
           data: {
-            userId: createOrderDto.userId || null,
-            sessionId: createOrderDto.sessionId || null,
+            userId: createOrderDto.userId || undefined,
+            sessionId: createOrderDto.sessionId || undefined,
             orderNumber: this.generateOrderNumber(),
             status: OrderStatus.PENDING,
             paymentMethod: createOrderDto.paymentMethod,
@@ -176,10 +176,16 @@ export class OrdersService {
             data: { items: [] },
           });
         } else if (createOrderDto.sessionId) {
-          await tx.cart.updateMany({
+          // Find cart by sessionId and clear it
+          const guestCart = await tx.cart.findUnique({
             where: { sessionId: createOrderDto.sessionId },
-            data: { items: [] },
           });
+          if (guestCart) {
+            await tx.cart.update({
+              where: { id: guestCart.id },
+              data: { items: [] },
+            });
+          }
         }
 
         this.logger.log(
@@ -221,7 +227,7 @@ export class OrdersService {
     // Verify order ownership: either userId or sessionId must match
     const isOwner =
       (userId && order.userId === userId) ||
-      (sessionId && order.sessionId === sessionId);
+      (sessionId && (order as any).sessionId === sessionId);
 
     if (!isOwner) {
       throw new NotFoundException(`Order with ID ${orderId} not found`);

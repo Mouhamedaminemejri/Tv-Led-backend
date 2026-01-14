@@ -277,7 +277,7 @@ export class CheckoutService {
     // Verify ownership: either userId or sessionId must match
     const isOwner =
       (userId && order.userId === userId) ||
-      (sessionId && order.sessionId === sessionId);
+      (sessionId && (order as any).sessionId === sessionId);
 
     if (!isOwner) {
       throw new NotFoundException(`Order with ID ${orderId} not found`);

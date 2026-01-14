@@ -264,15 +264,15 @@ export class CartService {
 
       // If no items, return empty structure
       if (items.length === 0) {
-        return {
-          id: cart.id,
-          userId: cart.userId || null,
-          sessionId: cart.sessionId || null,
-          items: [],
-          itemsWithProducts: [],
-          createdAt: cart.createdAt,
-          updatedAt: cart.updatedAt,
-        };
+      return {
+        id: cart.id,
+        userId: cart.userId || null,
+        sessionId: (cart as any).sessionId || null,
+        items: [],
+        itemsWithProducts: [],
+        createdAt: cart.createdAt,
+        updatedAt: cart.updatedAt,
+      };
       }
 
       // Fetch product details for each item
@@ -301,7 +301,7 @@ export class CartService {
       return {
         id: cart.id,
         userId: cart.userId || null,
-        sessionId: cart.sessionId || null,
+        sessionId: (cart as any).sessionId || null,
         items,
         itemsWithProducts,
         createdAt: cart.createdAt,
