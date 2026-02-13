@@ -91,5 +91,20 @@ export class ProductsQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  /**
+   * Specific compatible model name search
+   * Example: "Crystal UHD 55"
+   */
+  @IsOptional()
+  @IsString()
+  modelName?: string;
+
+  /**
+   * Specific reference/SKU search
+   */
+  @IsOptional()
+  @IsString()
+  reference?: string;
 }
 

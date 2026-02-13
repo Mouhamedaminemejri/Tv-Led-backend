@@ -5,7 +5,7 @@ import {
   Inject,
   Logger,
 } from '@nestjs/common';
-import { PrismaClient, Order, OrderStatus, PaymentMethod } from '@prisma/client';
+import { PrismaClient, Order, OrderStatus, PaymentMethod, PickupMethod } from '@prisma/client';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CartService } from '../cart/cart.service';
 
@@ -17,6 +17,76 @@ export class OrdersService {
     @Inject('PRISMA') private prisma: PrismaClient,
     private cartService: CartService,
   ) {}
+
+  /**
+   * Admin helper: central source for order workflow options.
+   * Frontend can consume this to build dropdowns without hardcoding enum values.
+   */
+  getOrderStatusOptions(): {
+    defaultStatus: OrderStatus;
+    statuses: Array<{
+      value: OrderStatus;
+      label: string;
+      requiresPickupMethod: boolean;
+      terminal: boolean;
+    }>;
+    pickupMethods: Array<{
+      value: PickupMethod;
+      label: string;
+    }>;
+  } {
+    return {
+      defaultStatus: OrderStatus.PENDING,
+      statuses: [
+        {
+          value: OrderStatus.PENDING,
+          label: 'Pending',
+          requiresPickupMethod: false,
+          terminal: false,
+        },
+        {
+          value: OrderStatus.PICKUP,
+          label: 'Pickup',
+          requiresPickupMethod: true,
+          terminal: false,
+        },
+        {
+          value: OrderStatus.CONFIRMED,
+          label: 'Confirmed',
+          requiresPickupMethod: false,
+          terminal: false,
+        },
+        {
+          value: OrderStatus.PROCESSING,
+          label: 'Processing',
+          requiresPickupMethod: false,
+          terminal: false,
+        },
+        {
+          value: OrderStatus.SHIPPED,
+          label: 'Shipped',
+          requiresPickupMethod: false,
+          terminal: false,
+        },
+        {
+          value: OrderStatus.DELIVERED,
+          label: 'Delivered',
+          requiresPickupMethod: false,
+          terminal: true,
+        },
+        {
+          value: OrderStatus.CANCELLED,
+          label: 'Cancelled',
+          requiresPickupMethod: false,
+          terminal: true,
+        },
+      ],
+      pickupMethods: [
+        { value: PickupMethod.CUSTOMER_PICKUP, label: 'Customer Pickup' },
+        { value: PickupMethod.COURIER_PICKUP, label: 'Courier Pickup' },
+      ],
+    };
+  }
 
   /**
    * Generate a unique order number
@@ -96,7 +166,7 @@ export class OrdersService {
             productId: product.id,
             quantity: item.quantity,
             currentStock: product.stock,
-            price: product.price,
+            price: product.price.toNumber(),
           });
         }
 
@@ -136,6 +206,7 @@ export class OrdersService {
             sessionId: createOrderDto.sessionId || undefined,
             orderNumber: this.generateOrderNumber(),
             status: OrderStatus.PENDING,
+            pickupMethod: createOrderDto.pickupMethod,
             paymentMethod: createOrderDto.paymentMethod,
             totalAmount,
             fullName: createOrderDto.fullName,
@@ -309,6 +380,9 @@ export class OrdersService {
     limit: number = 20,
     status?: OrderStatus,
     userId?: string,
+    clientName?: string,
+    email?: string,
+    phoneNumber?: string,
   ): Promise<{
     data: Order[];
     total: number;
@@ -325,6 +399,27 @@ export class OrdersService {
 
     if (userId) {
       where.userId = userId;
+    }
+
+    if (clientName) {
+      where.fullName = {
+        contains: clientName.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    if (email) {
+      where.email = {
+        contains: email.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    if (phoneNumber) {
+      where.phoneNumber = {
+        contains: phoneNumber.trim(),
+        mode: 'insensitive',
+      };
     }
 
     const [data, total] = await Promise.all([
@@ -398,6 +493,7 @@ export class OrdersService {
   async updateOrderStatus(
     orderId: string,
     status: OrderStatus,
+    pickupMethod?: PickupMethod,
   ): Promise<Order> {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
@@ -407,9 +503,18 @@ export class OrdersService {
       throw new NotFoundException(`Order with ID ${orderId} not found`);
     }
 
+    if (status === OrderStatus.PICKUP && !pickupMethod) {
+      throw new BadRequestException(
+        'pickupMethod is required when status is PICKUP',
+      );
+    }
+
     return this.prisma.order.update({
       where: { id: orderId },
-      data: { status },
+      data: {
+        status,
+        ...(pickupMethod !== undefined && { pickupMethod }),
+      },
       include: {
         orderItems: {
           include: {

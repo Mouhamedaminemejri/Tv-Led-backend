@@ -1,22 +1,40 @@
 import { IsString, IsNumber, IsArray, IsOptional, Min, Max } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateProductDto {
   @IsString()
   @IsOptional()
-  number?: string;
+  tvBacklightType?: string;
+
+  @IsString()
+  @IsOptional()
+  tvPanelType?: string;
+
+  @IsString()
+  @IsOptional()
+  tvFullName?: string;
+
+  // Legacy alias for backward compatibility.
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' ? undefined : value))
+  @IsString()
+  adminReference?: string;
 
   @IsString()
   reference: string;
+
+  // Legacy frontend field; accepted for compatibility and ignored by service.
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' ? undefined : value))
+  @IsString()
+  number?: string;
 
   @IsString()
   brand: string;
 
   @IsString()
-  title: string;
-
-  @IsString()
   @IsOptional()
-  summary?: string;
+  title?: string;
 
   @IsNumber()
   @Min(0)
@@ -32,18 +50,35 @@ export class CreateProductDto {
   @IsOptional()
   salePrice?: number;
 
+  @IsString()
+  @IsOptional()
+  config?: string;
+
+  @IsNumber()
+  @Min(0.01)
+  price: number;
+
   @IsNumber()
   @Min(0)
-  price: number;
+  @IsOptional()
+  tvSizeInch?: number;
 
   @IsString()
   @IsOptional()
-  description?: string;
+  stripCount?: string;
+
+  @IsString()
+  @IsOptional()
+  ledCount?: string;
 
   @IsNumber()
   @Min(0)
   @IsOptional()
-  size?: number;
+  voltage?: number;
+
+  @IsString()
+  @IsOptional()
+  length?: string;
 
   @IsNumber()
   @Min(0)

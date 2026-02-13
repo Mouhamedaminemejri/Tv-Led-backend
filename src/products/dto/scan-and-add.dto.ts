@@ -6,6 +6,12 @@ export class ScanAndAddDto {
   @IsString()
   reference?: string;
 
+  // Legacy frontend field; accepted for compatibility and ignored by service.
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' ? undefined : value))
+  @IsString()
+  number?: string;
+
   @IsOptional()
   @IsString()
   brand?: string;
@@ -16,19 +22,16 @@ export class ScanAndAddDto {
 
   @IsOptional()
   @IsString()
-  number?: string;
+  tvBacklightType?: string;
 
+  @IsOptional()
+  @IsString()
+  tvFullName?: string;
+
+  // Legacy alias for backward compatibility.
   @IsOptional()
   @IsString()
   adminReference?: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsOptional()
-  @IsString()
-  summary?: string;
 
   @IsOptional()
   @Transform(({ value }) => {
@@ -64,7 +67,7 @@ export class ScanAndAddDto {
   })
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
+  @Min(0.01)
   price?: number;
 
   @IsOptional()
@@ -76,7 +79,30 @@ export class ScanAndAddDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  size?: number;
+  tvSizeInch?: number;
+
+  @IsOptional()
+  @IsString()
+  stripCount?: string;
+
+  @IsOptional()
+  @IsString()
+  ledCount?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) return undefined;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    return isNaN(num) ? undefined : num;
+  })
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  voltage?: number;
+
+  @IsOptional()
+  @IsString()
+  length?: string;
 
   @IsOptional()
   @Transform(({ value }) => {

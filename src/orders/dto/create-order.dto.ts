@@ -9,7 +9,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { PaymentMethod } from '@prisma/client';
+import { PaymentMethod, PickupMethod } from '@prisma/client';
 
 export class BillingAddressDto {
   @IsString()
@@ -42,6 +42,10 @@ export class ShippingAddressDto {
 export class CreateOrderDto {
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod;
+
+  @IsOptional()
+  @IsEnum(PickupMethod)
+  pickupMethod?: PickupMethod;
 
   // User Information
   @IsString()

@@ -5,6 +5,7 @@ import {
   Body,
   Query,
   Param,
+  Headers,
   BadRequestException,
   UseGuards,
 } from '@nestjs/common';
@@ -43,9 +44,20 @@ export class CheckoutController {
   @Public()
   async handlePaymentCallback(
     @Body() callbackData: any,
-    @Query('gateway') gateway: 'paykassma' | 'mobile' = 'paykassma',
+    @Query('gateway') gateway: 'paykassma' | 'konnect' | 'mobile' = 'paykassma',
   ) {
     return this.checkoutService.handlePaymentCallback(callbackData, gateway);
+  }
+
+  @Post('webhook/konnect')
+  @Public()
+  async handleKonnectWebhook(
+    @Body() callbackData: any,
+    @Headers('x-konnect-signature') konnectSignature?: string,
+    @Headers('x-signature') genericSignature?: string,
+  ) {
+    const signature = konnectSignature || genericSignature;
+    return this.checkoutService.handleKonnectWebhook(callbackData, signature);
   }
 
   @Get('payment/status')

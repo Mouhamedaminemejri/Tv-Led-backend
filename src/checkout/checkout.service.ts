@@ -9,6 +9,7 @@ import { PrismaClient, Order, PaymentStatus, PaymentMethod } from '@prisma/clien
 import { InitiatePaymentDto } from './dto/initiate-payment.dto';
 import { OrdersService } from '../orders/orders.service';
 import { PaykassmaService } from './services/paykassma.service';
+import { KonnectService } from './services/konnect.service';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -19,6 +20,7 @@ export class CheckoutService {
     @Inject('PRISMA') private prisma: PrismaClient,
     private ordersService: OrdersService,
     private paykassmaService: PaykassmaService,
+    private konnectService: KonnectService,
     private configService: ConfigService,
   ) {}
 
@@ -98,10 +100,15 @@ export class CheckoutService {
     paymentUrl: string;
     message: string;
   }> {
-    const baseUrl =
+    const backendBaseUrl =
       this.configService.get<string>('APP_URL') || 'http://localhost:3001';
-    const callbackUrl = `${baseUrl}/api/checkout/payment/callback`;
-    const returnUrl = `${baseUrl}/checkout/success?orderId=${order.id}`;
+    const frontendBaseUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      this.configService.get<string>('APP_URL') ||
+      'http://localhost:3000';
+
+    const callbackUrl = `${backendBaseUrl}/api/checkout/payment/callback`;
+    const returnUrl = `${frontendBaseUrl}/checkout/success?orderId=${order.id}`;
 
     // Initiate payment with Paykassma
     const paymentResponse = await this.paykassmaService.initiatePayment(
@@ -165,8 +172,38 @@ export class CheckoutService {
     paymentUrl?: string;
     message: string;
   }> {
-    // TODO: Implement mobile payment gateway integration
-    // For now, create payment record as pending
+    const baseUrl =
+      this.configService.get<string>('APP_URL') || 'http://localhost:3001';
+    const frontendBaseUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      this.configService.get<string>('APP_URL') ||
+      'http://localhost:3000';
+
+    const callbackUrl = `${baseUrl}/api/checkout/payment/callback?gateway=konnect`;
+    const successUrl = `${frontendBaseUrl}/checkout/success?orderId=${order.id}&gateway=konnect`;
+    const failUrl = `${frontendBaseUrl}/checkout/fail?orderId=${order.id}&gateway=konnect`;
+
+    const paymentResponse = await this.konnectService.initiatePayment({
+      amountTnd: order.totalAmount,
+      orderNumber: order.orderNumber,
+      fullName: initiatePaymentDto.fullName,
+      email: initiatePaymentDto.email,
+      phoneNumber: initiatePaymentDto.phoneNumber,
+      successUrl,
+      failUrl,
+      callbackUrl,
+    });
+
+    if (!paymentResponse.success || !paymentResponse.paymentUrl) {
+      this.logger.error('Konnect payment initiation failed', {
+        orderId: order.id,
+        error: paymentResponse.error,
+      });
+      throw new BadRequestException(
+        paymentResponse.error || 'Failed to initiate mobile payment',
+      );
+    }
+
     await this.prisma.payment.create({
       data: {
         orderId: order.id,
@@ -174,12 +211,16 @@ export class CheckoutService {
         status: PaymentStatus.PENDING,
         amount: order.totalAmount,
         currency: 'TND',
+        gatewayTransactionId: paymentResponse.paymentRef,
+        paymentUrl: paymentResponse.paymentUrl,
+        callbackUrl,
       },
     });
 
     return {
       order,
-      message: 'Mobile payment integration coming soon.',
+      paymentUrl: paymentResponse.paymentUrl,
+      message: 'Mobile payment initiated successfully. Please complete payment.',
     };
   }
 
@@ -188,13 +229,17 @@ export class CheckoutService {
    */
   async handlePaymentCallback(
     gatewayData: any,
-    gateway: 'paykassma' | 'mobile' = 'paykassma',
+    gateway: 'paykassma' | 'konnect' | 'mobile' = 'paykassma',
   ): Promise<{ success: boolean; orderId?: string }> {
     try {
       let verificationResult;
 
       if (gateway === 'paykassma') {
         verificationResult = await this.paykassmaService.verifyCallback(
+          gatewayData,
+        );
+      } else if (gateway === 'konnect' || gateway === 'mobile') {
+        verificationResult = await this.konnectService.verifyCallback(
           gatewayData,
         );
       } else {
@@ -220,7 +265,9 @@ export class CheckoutService {
       // Update payment status
       const paymentStatus =
         verificationResult.status === 'success' ||
-        verificationResult.status === 'paid'
+        verificationResult.status === 'paid' ||
+        verificationResult.status === 'completed' ||
+        verificationResult.status === 'approved'
           ? PaymentStatus.SUCCESS
           : PaymentStatus.FAILED;
 
@@ -251,6 +298,23 @@ export class CheckoutService {
       this.logger.error('Error handling payment callback', error);
       return { success: false };
     }
+  }
+
+  async handleKonnectWebhook(
+    callbackData: any,
+    signature?: string,
+  ): Promise<{ success: boolean; orderId?: string }> {
+    const signatureValid = this.konnectService.verifyWebhookSignature(
+      callbackData,
+      signature,
+    );
+
+    if (!signatureValid) {
+      this.logger.warn('Rejected Konnect webhook due to invalid signature.');
+      return { success: false };
+    }
+
+    return this.handlePaymentCallback(callbackData, 'konnect');
   }
 
   /**

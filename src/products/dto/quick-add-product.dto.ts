@@ -5,6 +5,12 @@ export class QuickAddProductDto {
   @IsString()
   reference: string;
 
+  // Legacy frontend field; accepted for compatibility and ignored by service.
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' ? undefined : value))
+  @IsString()
+  number?: string;
+
   @IsOptional()
   @IsString()
   brand?: string;
@@ -15,19 +21,16 @@ export class QuickAddProductDto {
 
   @IsOptional()
   @IsString()
-  number?: string;
+  tvBacklightType?: string;
 
+  @IsOptional()
+  @IsString()
+  tvFullName?: string;
+
+  // Legacy alias for backward compatibility.
   @IsOptional()
   @IsString()
   adminReference?: string;
-
-  @IsOptional()
-  @IsString()
-  description?: string;
-
-  @IsOptional()
-  @IsString()
-  summary?: string;
 
   @IsOptional()
   @Type(() => Number)
@@ -48,14 +51,32 @@ export class QuickAddProductDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(0)
+  @Min(0.01)
   price?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   @Min(0)
-  size?: number;
+  tvSizeInch?: number;
+
+  @IsOptional()
+  @IsString()
+  stripCount?: string;
+
+  @IsOptional()
+  @IsString()
+  ledCount?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  voltage?: number;
+
+  @IsOptional()
+  @IsString()
+  length?: string;
 
   @IsOptional()
   @Type(() => Number)

@@ -32,6 +32,8 @@ export class ProductsController {
      *   - maxPrice (number)
      *   - inStock (boolean)
      *   - search (string)
+     *   - modelName (string, specific model search)
+     *   - reference (string, specific SKU/reference search)
      * 
      * Examples:
      *   GET /products?page=1&limit=10
@@ -52,6 +54,8 @@ export class ProductsController {
             maxPrice: query.maxPrice,
             inStock: query.inStock,
             search: query.search,
+            modelName: query.modelName,
+            reference: query.reference,
         };
         
         const result = await this.productsService.findPaginated(page, limit, filters);

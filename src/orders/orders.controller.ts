@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { Order, OrderStatus } from '@prisma/client';
+import { Order, OrderStatus, PickupMethod } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -89,7 +89,7 @@ export class OrdersController {
   /**
    * Get all orders (Admin only)
    * GET /api/orders/admin/all
-   * Query params: page, limit, status, userId
+   * Query params: page, limit, status, userId, clientName, email, phoneNumber
    */
   @Get('admin/all')
   @UseGuards(RolesGuard)
@@ -99,6 +99,9 @@ export class OrdersController {
     @Query('limit') limit?: string,
     @Query('status') status?: OrderStatus,
     @Query('userId') userId?: string,
+    @Query('clientName') clientName?: string,
+    @Query('email') email?: string,
+    @Query('phoneNumber') phoneNumber?: string,
   ): Promise<{
     data: Order[];
     total: number;
@@ -108,7 +111,15 @@ export class OrdersController {
   }> {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
-    return this.ordersService.getAllOrders(pageNum, limitNum, status, userId);
+    return this.ordersService.getAllOrders(
+      pageNum,
+      limitNum,
+      status,
+      userId,
+      clientName,
+      email,
+      phoneNumber,
+    );
   }
 
   /**
@@ -120,6 +131,17 @@ export class OrdersController {
   @Roles(UserRole.ADMIN)
   async getOrdersByUser(@Param('userId') userId: string): Promise<Order[]> {
     return this.ordersService.getUserOrders(userId);
+  }
+
+  /**
+   * Get order workflow options (Admin only)
+   * GET /api/orders/admin/status-options
+   */
+  @Get('admin/status-options')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  getOrderStatusOptions() {
+    return this.ordersService.getOrderStatusOptions();
   }
 
   /**
@@ -139,11 +161,12 @@ export class OrdersController {
   async updateOrderStatus(
     @Param('id') id: string,
     @Body('status') status: OrderStatus,
+    @Body('pickupMethod') pickupMethod?: PickupMethod,
   ): Promise<Order> {
     if (!status) {
       throw new BadRequestException('status is required');
     }
-    return this.ordersService.updateOrderStatus(id, status);
+    return this.ordersService.updateOrderStatus(id, status, pickupMethod);
   }
 }
 

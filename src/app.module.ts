@@ -10,6 +10,8 @@ import { ScraperModule } from './scraper/scraper.module';
 import { AuthModule } from './auth/auth.module';
 import { AddressesModule } from './addresses/addresses.module';
 import { ConfigModule } from '@nestjs/config';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { ConfigModule } from '@nestjs/config';
     UploadModule,
     CartModule,
     OrdersModule,
+    DashboardModule,
+    SuppliersModule,
     CheckoutModule,
     ScraperModule,
   ],

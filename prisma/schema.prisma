@@ -56,17 +56,28 @@ model User {
 
 model Product {
   id            String      @id @default(uuid())
-  number        String? // Number from JSON (can be string like "101A")
+  suk              String?     @unique // From SUK (Excel)
+  stripCount       String?     // From Number strip (now text)
+  ledCount         String?     // From Number leds (now text)
+  voltage          Float?      // From Voltage
+  length           String?     // From length
+  models           String?     // From Models (allows search by Model Name)
+  tvFullName       String?     // Full TV marking/name
+  config           String      @default("{\"Hide\":null,\"discount\":null,\"discountedPrice\":null,\"estimatedDeliveryGapHours\":null,\"deliveryMethods\":[]}")
+  // dimensions removed
+
+  tvBacklightType  String?     // Replaced 'ledType'
+  tvSizeInch       Int?        // Replaced 'size', TV size extracted from title
+  tvPanelType      String?     // New field: TV Panel Type
   reference     String
   brand         String
+  brandEntity   Brand       @relation(fields: [brand], references: [name], onUpdate: Cascade, onDelete: Restrict)
   title         String
-  summary       String? // Summary from JSON
-  purchasePrice Float? // PurchasePrice from JSON
+  purchasePrice Decimal?    @db.Decimal(10, 2) // PurchasePrice from JSON
   supplier      String? // Supplier from JSON
-  salePrice     Float? // SalePrice from JSON
-  price         Float // SalePrice (for backward compatibility, will be populated from salePrice)
-  description   String? // Description from JSON
-  size          Int? // TV size extracted from title (number before "inch")
+  supplierEntity Supplier?  @relation(fields: [supplier], references: [name], onUpdate: Cascade, onDelete: SetNull)
+  salePrice     Decimal?    @db.Decimal(10, 2) // SalePrice from JSON
+  price         Decimal     @db.Decimal(10, 2) // SalePrice (for backward compatibility, will be populated from salePrice)
   stock         Int         @default(0) // Default stock
   rating        Int         @default(0) // Default rating
   images        String[]    @default([])
@@ -77,8 +88,27 @@ model Product {
 
   @@index([reference])
   @@index([brand])
-  @@index([number])
-  @@index([size])
+  @@index([tvBacklightType])
+  @@index([tvSizeInch])
+  @@index([suk])
+  @@index([models])
+  @@index([supplier])
+}
+
+model Brand {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Supplier {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Cart {
@@ -96,11 +126,17 @@ model Cart {
 
 enum OrderStatus {
   PENDING
+  PICKUP
   CONFIRMED
   PROCESSING
   SHIPPED
   DELIVERED
   CANCELLED
+}
+
+enum PickupMethod {
+  CUSTOMER_PICKUP
+  COURIER_PICKUP
 }
 
 enum PaymentMethod {
@@ -117,6 +153,7 @@ model Order {
   user          User?         @relation(fields: [userId], references: [id])
   orderNumber   String        @unique // Human-readable order number
   status        OrderStatus   @default(PENDING)
+  pickupMethod  PickupMethod?
   paymentMethod PaymentMethod
   totalAmount   Float
 
